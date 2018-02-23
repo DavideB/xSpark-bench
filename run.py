@@ -4,28 +4,37 @@ This module handle the configuration of the instances and the execution of  the 
 
 import json
 import multiprocessing
-import os
 import time
-from ast import literal_eval
 from concurrent.futures import ThreadPoolExecutor
-
+from ast import literal_eval
 import log
-from config import PRIVATE_KEY_PATH, PRIVATE_KEY_NAME, TEMPORARY_STORAGE, PROVIDER
+from spark_log_profiling import processing
+import metrics
+import plot
+import pickle
+import os
+import shutil
 from config import UPDATE_SPARK_DOCKER, DELETE_HDFS, SPARK_HOME, KILL_JAVA, SYNC_TIME, \
+    KEY_PAIR_PATH, \
     UPDATE_SPARK, \
     DISABLE_HT, ENABLE_EXTERNAL_SHUFFLE, OFF_HEAP, OFF_HEAP_BYTES, K, T_SAMPLE, TI, CORE_QUANTUM, \
-    CORE_MIN, CPU_PERIOD, \
+    CORE_MIN, CPU_PERIOD, HDFS, \
     CORE_VM, UPDATE_SPARK_MASTER, DEADLINE, MAX_EXECUTOR, ALPHA, BETA, OVER_SCALE, LOCALITY_WAIT, \
     LOCALITY_WAIT_NODE, CPU_TASK, \
     LOCALITY_WAIT_PROCESS, LOCALITY_WAIT_RACK, INPUT_RECORD, NUM_TASK, BENCH_NUM_TRIALS, \
     SCALE_FACTOR, RAM_EXEC, \
-    RAM_DRIVER, BENCHMARK_PERF, BENCH_LINES, HADOOP_CONF, \
+    RAM_DRIVER, BENCHMARK_PERF, BENCH_LINES, HDFS_MASTER, DATA_AMI, REGION, HADOOP_CONF, \
     CONFIG_DICT, HADOOP_HOME,\
     SPARK_2_HOME, BENCHMARK_BENCH, BENCH_CONF, LOG_LEVEL, CORE_ALLOCATION,DEADLINE_ALLOCATION,\
-    UPDATE_SPARK_BENCH, UPDATE_SPARK_PERF, SPARK_PERF_FOLDER, NUM_INSTANCE, STAGE_ALLOCATION, HEURISTIC, VAR_PAR_MAP
-from util.ssh_client import sshclient_from_node, sshclient_from_ip
-from util.utils import timing, between, get_cfg, write_cfg, open_cfg
+    UPDATE_SPARK_BENCH, UPDATE_SPARK_PERF, SPARK_PERF_FOLDER, NUM_INSTANCE, STAGE_ALLOCATION, HEURISTIC, VAR_PAR_MAP, \
+    PROCESS_ON_SERVER, INSTALL_PYTHON3, AZ_PUB_KEY_PATH
 
+from config import PRIVATE_KEY_PATH, PRIVATE_KEY_NAME, TEMPORARY_STORAGE, PROVIDER
+
+from util.utils import timing, between, get_cfg, write_cfg, open_cfg, make_sure_path_exists
+
+from util.ssh_client import sshclient_from_node, sshclient_from_ip
+import socket #vboxvm
 
 # Modifiche fatte
 # - uso di PRIVATE_KEY_PATH anzichè KEY_PAIR_PATH
@@ -309,7 +318,11 @@ def setup_master(node, slaves_ip, hdfs_master):
     :param node:
     :return:
     """
-    ssh_client = sshclient_from_node(node, ssh_key_file=PRIVATE_KEY_PATH, user_name='ubuntu')
+    #ssh_client = sshclient_from_node(node, ssh_key_file=PRIVATE_KEY_PATH, user_name='ubuntu') #vboxvm_removed
+    master_public_ip = socket.gethostbyname("XSPARKWORK0") #vboxvm
+    ssh_client = sshclient_from_ip(master_public_ip, PRIVATE_KEY_PATH, user_name='ubuntu') #vboxvm
+    stdout, stderr, status = ssh_client.run("hostname  && pwd") #vboxvm
+    print(stdout) #vboxvm
     with open_cfg(mode='w') as cfg:
         current_cluster = cfg['main']['current_cluster']
         benchmark = cfg['main']['benchmark'] if 'main' in cfg and 'benchmark' in cfg['main'] else ''
@@ -318,16 +331,19 @@ def setup_master(node, slaves_ip, hdfs_master):
         # input_record = cfg['pagerank']['num_v'] if 'pagerank' in cfg and 'num_v' in cfg['pagerank'] else INPUT_RECORD
         # print("input_record: {}".format(input_record))
 
-        print("Setup Master: PublicIp=" + node.public_ips[0] + " PrivateIp=" + node.private_ips[0])
-        master_private_ip = get_ip(node)
-        master_public_ip = node.public_ips[0]
+        
+        master_private_ip = master_public_ip #vboxvm
+        print("Setup Master: PublicIp=" + master_public_ip + " PrivateIp=" + master_private_ip) #vboxvm
+        #print("Setup Master: PublicIp=" + node.public_ips[0] + " PrivateIp=" + node.private_ips[0]) #vboxvm_removed
+        #master_private_ip = get_ip(node)  #vboxvm_removed
+        #master_public_ip = node.public_ips[0]  #vboxvm_removed
 
         # save private master_ip to cfg file
         print('saving master ip')
         cfg[current_cluster]['master_private_ip'] = master_private_ip
         cfg[current_cluster]['master_public_ip'] = master_public_ip
 
-    common_setup(ssh_client)
+   # common_setup(ssh_client) #vboxvm_removed
 
 
 
@@ -397,7 +413,7 @@ def setup_master(node, slaves_ip, hdfs_master):
             ENABLE_EXTERNAL_SHUFFLE, SPARK_HOME))
 
     if current_cluster == 'spark':
-
+        '''
         if benchmark == 'sort_by_key':
             BENCH_CONF['scala-sort-by-key']['ScaleFactor'] = literal_eval(cfg['sort_by_key']['scale_factor'])[1]
             print('setting ScaleFactor as {}'.format(BENCH_CONF['scala-sort-by-key']['ScaleFactor']))
@@ -406,7 +422,7 @@ def setup_master(node, slaves_ip, hdfs_master):
             SCALE_FACTOR = BENCH_CONF[BENCHMARK_PERF[0]]["ScaleFactor"]
             INPUT_RECORD = 200 * 1000 * 1000 * SCALE_FACTOR
             NUM_TASK = SCALE_FACTOR
-
+        '''
         # OFF HEAP
         ssh_client.run(
             "sed -i '32s{.*{spark.memory.offHeap.enabled " + str(
@@ -602,7 +618,74 @@ def setup_master(node, slaves_ip, hdfs_master):
         print("   Starting Spark History Server")
         ssh_client.run(
             'export SPARK_HOME="{d}" && {d}sbin/start-history-server.sh'.format(d=SPARK_HOME))
-
+        
+    # SETUP CSPARKWORK MASTER FOR PROCESSING LOGS ON SERVER
+    # To be changed: generalize private and public key paths refernces (currently the Azure ones)
+    with open_cfg() as cfg:
+        tool_on_master = cfg.getboolean('main', 'tool_on_master')
+    if current_cluster == 'spark' and PROCESS_ON_SERVER == 1: #vboxvm
+        if not tool_on_master:
+            if INSTALL_PYTHON3 == 1:
+                stdout, stderr, status = ssh_client.run("sudo apt-get update && sudo apt-get install -y python3-pip && " +
+                                                        "sudo apt-get build-dep -y matplotlib && "+
+                                                        "sudo apt-get install -y build-essential libssl-dev libffi-dev python-dev python3-dev && "+
+                                                        #"sudo apt-get install pkg-config" +             #vboxvm? (double-check)
+                                                        #"sudo apt-get install libfreetype6-dev" +       #vboxvm? (double-check)
+                                                        "sudo pip3 install --upgrade setuptools")
+                """Install python3 on cSpark master"""
+                print("Installing Python3 on cspark master:\n" + stdout)
+            #stdout, stderr, status = ssh_client.run("sudo rm -r /home/ubuntu/xSpark-bench")                                     #vboxvm
+            #stdout, stderr, status = ssh_client.run("git clone -b process-on-server --single-branch " +                         #vboxvm
+            #                                        "https://github.com/DavideB/xSpark-bench.git /home/ubuntu/xSpark-bench")
+            #                                        "https://github.com/gioenn/xSpark-bench.git /home/ubuntu/xSpark-bench")
+            """Clone xSpark-benchmark on cspark master"""
+            print("Cloning xSpark-benchmark tool on cspark master:\n" + stdout)
+        
+            if not "id_rsa" in ssh_client.listdir("/home/ubuntu/"):
+                    ssh_client.put(localpath=PRIVATE_KEY_PATH, remotepath="/home/ubuntu/id_rsa")
+                    ssh_client.run("chmod 400 /home/ubuntu/id_rsa")
+            """upload private key to home directory"""
+            
+            if not "id_rsa.pub" in ssh_client.listdir("/home/ubuntu/"):
+                    ssh_client.put(localpath=AZ_PUB_KEY_PATH, remotepath="/home/ubuntu/id_rsa.pub")
+                    ssh_client.run("chmod 400 /home/ubuntu/id_rsa.pub")
+            """upload public key to home directory"""
+            
+            ssh_client.run("sudo rm /home/ubuntu/credentials.py")
+            ssh_client.put(localpath="credentials.py", remotepath="/home/ubuntu/xSpark-bench/credentials.py")
+            """upload credentials.py"""
+            
+            ssh_client.run("sudo rm /home/ubuntu/config.py")
+            ssh_client.put(localpath="config.py", remotepath="/home/ubuntu/xSpark-bench/config.py")
+            """upLoad config.py"""
+            
+            # cfg_clusters.ini updated before uploading it to master
+            with open_cfg(mode='w') as cfg:
+                cfg['main']['tool_on_master'] = 'true'
+                write_cfg(cfg)
+                #tool_on_master = True
+            
+            #ssh_client.run("sudo rm /home/ubuntu/cfg_clusters.ini")
+            #ssh_client.put(localpath="cfg_clusters.ini", remotepath="/home/ubuntu/xSpark-bench/cfg_clusters.ini")
+            #"""upLoad cfg_clusters.ini"""
+    
+            stdout, stderr, status = ssh_client.run("""sed -i -r 's{^KEY_PAIR_PATH( *= *["'"'"'].*["'"'"']) *\+ *{KEY_PAIR_PATH = \"/home/ubuntu/\" + {' /home/ubuntu/xSpark-bench/config.py""")
+            stdout, stderr, status = ssh_client.run("""sed -i -r 's{^AZ_PRV_KEY_PATH( *= *["'"'"'].*["'"'"']) *\+ *{AZ_PRV_KEY_PATH = \"/home/ubuntu/\" + {' /home/ubuntu/xSpark-bench/credentials.py""")
+            stdout, stderr, status = ssh_client.run("""sed -i -r 's{^AZ_PUB_KEY_PATH( *= *["'"'"'].*["'"'"']) *\+ *{AZ_PUB_KEY_PATH = \"/home/ubuntu/\" + {' /home/ubuntu/xSpark-bench/credentials.py""")
+            stdout, stderr, status = ssh_client.run("cat /home/ubuntu/xSpark-bench/credentials.py | grep -e ^AZ_PRV_KEY_PATH -e ^AZ_PUB_KEY_PATH")
+            print("Re-defining private and public key paths in credentials.py\n" + stdout)
+            stdout, stderr, status = ssh_client.run("cat /home/ubuntu/xSpark-bench/config.py | grep -e ^KEY_PAIR_PATH")
+            print("Re-defining private and public key paths in config.py\n" + stdout)
+            """Re-define private and public key paths"""
+            
+            stdout, stderr, status = ssh_client.run("cd /home/ubuntu/xSpark-bench && " +
+                                                    "sudo pip3 install -r requirements.txt")
+            """Install xSpark-benchmark tool requirements"""
+            print("Installing xSpark-benchmark tool requirements\n" + stdout)    
+        
+        ssh_client.run("sudo rm /home/ubuntu/xSpark-bench/cfg_clusters.ini")
+        ssh_client.put(localpath="cfg_clusters.ini", remotepath="/home/ubuntu/xSpark-bench/cfg_clusters.ini")
+        """upLoad cfg_clusters.ini"""
     return master_private_ip, node
 
 
@@ -735,6 +818,23 @@ def check_slave_connected_master(ssh_client):
     """
     pass
 
+def upload_profile_to_master(nodes, profile_fname, localfilepath):
+    """
+
+    :param nodes, profile_fname, localfilepath:
+    :return:
+    """
+    #ssh_client = sshclient_from_node(nodes[0], ssh_key_file=PRIVATE_KEY_PATH, user_name='ubuntu')  #vboxvm_removed
+    master_public_ip = socket.gethostbyname("XSPARKWORK0") #vboxvm
+    ssh_client = sshclient_from_ip(master_public_ip, PRIVATE_KEY_PATH, user_name='ubuntu') #vboxvm
+    print("Uploading benchmark profile: " + profile_fname + "\n")
+    if not profile_fname in ssh_client.listdir(SPARK_HOME + "conf/"):
+        ssh_client.put(localpath=localfilepath, remotepath=SPARK_HOME + "conf/" + profile_fname)
+        ssh_client.run("sudo chmod 400 " + SPARK_HOME + "conf/" + profile_fname)
+        print("Benchmark profile successfully uploaded\n") 
+        """upload profile to spark conf directory"""
+    else:
+        print("Not uploaded: a benchmark profile with the same name already exists\n")
 
 @timing
 def run_benchmark(nodes):
@@ -742,7 +842,9 @@ def run_benchmark(nodes):
 
     :return:
     """
-
+    master_public_ip = socket.gethostbyname("XSPARKWORK0") #vboxvm
+    ssh_client = sshclient_from_ip(master_public_ip, PRIVATE_KEY_PATH, user_name='ubuntu') #vboxvm
+    
     if len(nodes) == 0:
         print("No instances running")
         exit(1)
@@ -759,11 +861,12 @@ def run_benchmark(nodes):
         cfg['main']['max_executors'] = str(end_index - 1)
         # TODO: pass slaves ip
         slaves_ip = [get_ip(i) for i in nodes[1:end_index]]
+        iter_num = cfg['main']['iter_num'] #vboxvm
 
     master_ip, master_node = setup_master(nodes[0], slaves_ip, hdfs_master_private_ip)
     if SPARK_HOME == SPARK_2_HOME:
         print("Check Effectively Executor Running")
-
+    '''    #vboxvm_removed
     count = 1
     with ThreadPoolExecutor(8) as executor:
         for i in nodes[1:end_index]:
@@ -810,7 +913,7 @@ def run_benchmark(nodes):
     # if not PRIVATE_KEY_NAME in files:
     #     ssh_client.put(localpath=PRIVATE_KEY_PATH, remotepath="/home/ubuntu/" + PRIVATE_KEY_NAME)
     #     ssh_client.run("chmod 400 " + "$HOME/" + PRIVATE_KEY_NAME)
-
+    '''#vboxvm_removed
     # LANCIARE BENCHMARK
     if current_cluster == 'spark':
         if benchmark == 'pagerank':
@@ -846,9 +949,26 @@ def run_benchmark(nodes):
             logfolder = "/home/ubuntu/" + "/".join(app_log.split("/")[:-1])
             print(logfolder)
             output_folder = logfolder[1:]
+            
+        profile = False
+        profile_fname = ""
+
+        with open_cfg() as cfg:
+            
+            profile = cfg.getboolean('main', 'profile') if 'main' in cfg and 'profile' in cfg['main'] else False
+            #profile = cfg['main']['profile'] if 'main' in cfg and 'profile' in cfg['main'] else False
+            profile_fname = cfg[benchmark]['profile_name'] if profile and \
+                                                              'main' in cfg and \
+                                                              'benchmark' in cfg['main'] and \
+                                                              'profile_name' in cfg[benchmark] \
+                                                           else ""
+            if  profile and profile_fname != "" :
+                # delete selected benchmark profile file
+                print("Deleting " + benchmark + " benchmark reference profile: " + profile_fname + "\n")
+                stdout, stderr, status = ssh_client.run("sudo rm " + SPARK_HOME + "conf/" + profile_fname + ".json")
+                        
 
         for bench in BENCHMARK_BENCH:
-
 
             for bc in BENCH_CONF[bench]:
                 if bc != "NumTrials":
@@ -862,29 +982,86 @@ def run_benchmark(nodes):
                 ssh_client.run(
                     'eval `ssh-agent -s` && ssh-add ' + "$HOME/" + PRIVATE_KEY_NAME + ' && export SPARK_HOME="' + SPARK_HOME + '" && ./spark-bench/' + bench + '/bin/gen_data.sh')
 
-            check_slave_connected_master(ssh_client)
+            #check_slave_connected_master(ssh_client) #vboxvm_removed
             print("Running Benchmark " + bench)
 
-            ssh_client.run(
-                'eval `ssh-agent -s` && ssh-add ' + "$HOME/" + PRIVATE_KEY_NAME + ' && export SPARK_HOME="' + SPARK_HOME + '" && ./spark-bench/' + bench + '/bin/run.sh')
+            #ssh_client.run(  #vboxvm_removed
+             #   'eval `ssh-agent -s` && ssh-add ' + "$HOME/" + PRIVATE_KEY_NAME + ' && export SPARK_HOME="' + SPARK_HOME + '" && ./spark-bench/' + bench + '/bin/run.sh') #vboxvm_removed
             logfolder = "/home/ubuntu/spark-bench/num"
             output_folder = "home/ubuntu/spark-bench/num/"
-
+            # ensure there is no directory named 'old' in log folder
+            stdout, stderr, status = ssh_client.run("cd "+ logfolder + " && sudo rm -r old") 
+            stdout, stderr, status = ssh_client.run("cd "+ CONFIG_DICT["Spark"]["SparkHome"] + "spark-events/ && sudo cp -a " +
+                                                     CONFIG_DICT["Spark"]["SparkHome"] + "event-logs/. ./ && sudo rename 's/$/_"+ iter_num +"/' *") #vboxvm
+            stdout, stderr, status = ssh_client.run("sudo chown ubuntu:ubuntu /usr/local/spark/conf")#check if needed
+            print("sudo chown ubuntu:ubuntu /usr/local/spark/conf:" +stdout+stderr)
         # RODO: DOWNLOAD LOGS
-        output_folder = log.download(logfolder, [i for i in nodes[:end_index]], master_ip,
-                                     output_folder, CONFIG_DICT)
-
-        write_config(output_folder)
-        print("Saving output folder {}".format(os.path.abspath(output_folder)))
-        cfg['out_folders']['output_folder_'+str(len(cfg['out_folders']))] = os.path.abspath(output_folder)
-        # Saving cfg on project home directory and output folder
-        write_cfg(cfg)
-        write_cfg(cfg, output_folder)
-
-        # PLOT LOGS
-#        plot.plot(output_folder + "/")
-
-        # COMPUTE METRICS
-#        metrics.compute_metrics(output_folder + "/")
+        if PROCESS_ON_SERVER:
+            master_public_ip = socket.gethostbyname("XSPARKWORK0") #vboxvm
+            ssh_client = sshclient_from_ip(master_public_ip, PRIVATE_KEY_PATH, user_name='ubuntu') #vboxvm
+            for file in os.listdir("./"):
+                if file.endswith(".pickle"):
+                    os.remove(file)
+            with open('nodes_ids.pickle', 'wb') as f:
+                pickle.dump([n.id for n in [i for i in nodes[:end_index]]], f)       
+            ssh_client.put(localpath="nodes_ids.pickle", remotepath="/home/ubuntu/xSpark-bench/nodes_ids.pickle")
+            with open('logfolder.pickle', 'wb') as f:
+                pickle.dump(logfolder, f)       
+            ssh_client.put(localpath="logfolder.pickle", remotepath="/home/ubuntu/xSpark-bench/logfolder.pickle")
+            with open('output_folder.pickle', 'wb') as f:
+                pickle.dump(output_folder, f)       
+            ssh_client.put(localpath="output_folder.pickle", remotepath="/home/ubuntu/xSpark-bench/output_folder.pickle")
+            with open('master_ip.pickle', 'wb') as f:
+                pickle.dump(master_ip, f)       
+            ssh_client.put(localpath="master_ip.pickle", remotepath="/home/ubuntu/xSpark-bench/master_ip.pickle")        
+            stdout, stderr, status = ssh_client.run("cd xSpark-bench && sudo python3 process_on_server.py")
+            print("Processing on server:\n" + stdout + stderr)
+            #master_node = [i for i in nodes if get_ip(i) == master_ip][0]
+            print("Downloading results from server...")
+            for dir in ssh_client.listdir("xSpark-bench/home/ubuntu/spark-bench/num/"):
+                print("folder: " + str(dir))
+                try:
+                    os.makedirs(output_folder + dir)
+                    for file in ssh_client.listdir("xSpark-bench/home/ubuntu/spark-bench/num/" + dir + "/"):
+                        output_file = (output_folder + dir + "/" + file)
+                        print("file: " + output_file)
+                        ssh_client.get(remotepath="xSpark-bench/" + output_file, localpath=output_file)
+                except FileExistsError:
+                    print("Output folder already exists: no files downloaded")
+            print("Updating local copy of cfg_clusters.ini")
+            ssh_client.get(remotepath="xSpark-bench/cfg_clusters.ini", localpath="cfg_clusters.ini")
+            #for dir in ssh_client.listdir("xSpark-bench/spark_log_profiling/"):
+            #for dir in ["avg_json", "input_logs", "output_json", "processed_logs", "processed_profiles"]: 
+            for dir in ["avg_json", "input_logs", "output_json", "processed_profiles"]: # do not download logfiles in "processed_logs" folder
+                print("folder: " + dir)
+                make_sure_path_exists("spark_log_profiling/" + dir)
+                for file in ssh_client.listdir("xSpark-bench/spark_log_profiling/" + dir + "/"):
+                    fpath = "spark_log_profiling/" + dir + "/"
+                    if file not in os.listdir(fpath):
+                        ssh_client.get(remotepath="xSpark-bench/" + fpath + file, localpath=fpath + file)
+                        print("Remote file: ~/xSpark-bench/" + fpath + file + " downloaded")
+                    else:
+                        print("File " + fpath + file + " already exists: not downloaded")
+        else:    
+            output_folder = log.download(logfolder, [i for i in nodes[:end_index]], master_ip,
+                                         output_folder, CONFIG_DICT)
+            with open_cfg() as cfg:
+                if cfg.getboolean('main', 'profile'):                                                                       # Profiling
+                    processing.main()                                                                                       # Profiling
+                    for filename in os.listdir('./spark_log_profiling/output_json/'):                                       # Profiling
+                        if output_folder.split("/")[-1].split("-")[-1] in filename:                                         # Profiling
+                            shutil.copy('./spark_log_profiling/output_json/' + filename, output_folder + "/" + filename)    # Profiling
+            print("Saving output folder {}".format(os.path.abspath(output_folder)))
+            with open_cfg(mode='w') as cfg:
+                cfg['out_folders']['output_folder_'+str(len(cfg['out_folders']))] = os.path.abspath(output_folder)
+                # Saving cfg on project home directory and output folder
+                write_cfg(cfg)
+                write_cfg(cfg, output_folder)
+    
+            # PLOT LOGS
+            plot.plot(output_folder + "/")
+    
+            # COMPUTE METRICS
+            metrics.compute_metrics(output_folder + "/")
 
         print("\nCHECK VALUE OF SCALE FACTOR AND PREV SCALE FACTOR FOR HDFS CASE")

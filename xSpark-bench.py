@@ -5,6 +5,7 @@ import argparse
 import sys
 
 from spark_log_profiling import processing as profiling
+from spark_log_profiling import average_runs
 from spark_time_analysis import run as run_ta
 from colors import header, okblue, okgreen, warning, underline, bold, fail
 
@@ -15,8 +16,38 @@ import argcomplete
 
 libcloud.common.base.RETRY_FAILED_HTTP_REQUESTS = True
 
-
 def run_xspark(current_cluster, num_instance=NUM_INSTANCE, num_run=NUM_RUN, cluster_id=CLUSTER_ID, terminate=TERMINATE,
+               run=RUN, reboot=REBOOT, assume_yes=False):
+    """ Main function;
+    * Launch spot request of NUMINSTANCE
+    * Run Benchmark
+    * Download Log
+    * Plot data from log
+    """
+    print(header('run_xspark(num_instance={}, num_run={}, cluster_id={},terminate={}, run={}, reboot={})'
+          .format(num_instance, num_run, cluster_id, terminate, run, reboot)))
+    # get cfg_file and initialize main settings
+    with utils.open_cfg(mode='w') as cfg:
+        if 'main' not in cfg:
+            cfg['main'] = {}
+        cfg.set('main', 'current_cluster', current_cluster)
+
+    bench_instance = BenchInstanceFactory.get_bench_instance(PROVIDER, cluster_id)
+    setup_ok = True
+
+    if num_instance > 0:
+        println("setup_ok = bench_instance.setup(num_instance, assume_yes)")
+
+    if reboot:
+        println("bench_instance.reboot()")
+
+    if setup_ok and run:
+        bench_instance.run(num_run)
+
+    if terminate:
+        println("bench_instance.terminate()")
+
+def run_xspark_disabled(current_cluster, num_instance=NUM_INSTANCE, num_run=NUM_RUN, cluster_id=CLUSTER_ID, terminate=TERMINATE,
                run=RUN, reboot=REBOOT, assume_yes=False):
     """ Main function;
     * Launch spot request of NUMINSTANCE
@@ -47,14 +78,25 @@ def run_xspark(current_cluster, num_instance=NUM_INSTANCE, num_run=NUM_RUN, clus
     if terminate:
         bench_instance.terminate()
 
-
+def deploy_profile(bench, cluster_id=CLUSTER_ID):
+    """ Main function;
+    * Uploads profile to xSpark 
+    * configuration directory
+    * on spark master
+    """
+    #moved to bench.upload_profile
+    #cfg = utils.get_cfg()
+    #profile_fname = cfg[bench][profile_name] + 'json'
+    bench_instance = BenchInstanceFactory.get_bench_instance(PROVIDER, cluster_id)
+    #bench_instance.upload_profile(profile_fname)
+    bench_instance.upload_profile()
 
 def setup_cluster(cluster, num_instances, assume_yes):
     # termporary structure to save run configuration
     # TODO: IMPROVE THIS
     run_on_setup = {
         'spark': 0,
-        'hdfs' : 1,
+        'hdfs' : 0,
         'generic': 0
     }
     cluster_id = CLUSTER_MAP[cluster]
@@ -114,8 +156,39 @@ def setup(args):
 
 
 def profile(args):
-    print(bold('Profile {} performing {} runs...'.format(args.exp_file_path, args.num_runs)))
-    raise NotImplementedError()
+    cluster_id = CLUSTER_MAP['spark']
+    var_par = args.var_par
+    exp_profile_name = args.exp_profile_name if args.exp_profile_name else ""
+    benchmark = args.benchmark
+    num_run = args.num_runs
+    max_executors = args.max_executors
+    num_partitions = args.num_partitions
+    for v in var_par:
+        with utils.open_cfg(mode='w') as cfg:
+            cfg['main'] = {}
+            cfg['main']['profile'] = 'true'
+            cfg['main']['tool_on_master'] = 'false'
+            cfg['main']['benchmark'] = benchmark
+            cfg['main']['iter_num'] = str(1) #vboxvm
+            cfg[benchmark] = {}
+            cfg[benchmark][VAR_PAR_MAP[benchmark]['var_name']] = '({}, {})'.format(VAR_PAR_MAP[benchmark]['default'][0], v)
+            cfg[benchmark]['profile_name']= \
+                '{}'.format(VAR_PAR_MAP[benchmark]['profile_name']) if not args.exp_profile_name else args.exp_profile_name
+            cfg[benchmark]['num_partitions'] = str(num_partitions)
+            if max_executors:
+                cfg['main']['max_executors'] = max_executors
+        print(bold('Profile {} performing {} runs for benchmark {} on cluster {} with {}={}...'.format(exp_profile_name, 
+                                                                                                       num_run, benchmark,
+                                                                                                       cluster_id,
+                                                                                                       VAR_PAR_MAP[benchmark][
+                                                                                                           'var_name'], v)))
+        run_xspark(current_cluster='spark', num_instance=0, num_run=num_run,
+                   cluster_id=cluster_id, run=1, terminate=0, reboot=0)
+        #profiling.main()
+        average_runs.main(profile_name=utils.get_cfg()[benchmark]['profile_name'])
+        #run_log_profiling(args.local)
+        deploy_profile(cluster_id, benchmark)
+    # raise NotImplementedError()
 
 
 def submit(args):
@@ -159,6 +232,8 @@ def launch_exp(args):
     for v in var_par:
         with utils.open_cfg(mode='w') as cfg:
             cfg['main'] = {}
+            cfg['main']['profile'] = 'false'
+            cfg['main']['tool_on_master'] = 'false'
             cfg['main']['benchmark'] = bench
             cfg[bench] = {}
             cfg[bench][VAR_PAR_MAP[bench]['var_name']] = '({}, {})'.format(VAR_PAR_MAP[bench]['default'][0], v)
@@ -169,8 +244,8 @@ def launch_exp(args):
                                                                                                cluster_id,
                                                                                                VAR_PAR_MAP[bench][
                                                                                                    'var_name'], v)))
-        run_xspark(current_cluster='spark', num_instance=0, num_run=num_run,
-                   cluster_id=cluster_id, run=1, terminate=0, reboot=0)
+        #run_xspark(current_cluster='spark', num_instance=0, num_run=num_run,
+        #           cluster_id=cluster_id, run=1, terminate=0, reboot=0)
         if args.profile:
             run_log_profiling(None)
         if args.time_analysis:
@@ -210,10 +285,10 @@ def main():
     parser_log_profiling = subparsers.add_parser('log_profiling', help='runs the log_profiling')
     parser_time_analysis = subparsers.add_parser('time_analysis', help='runs the time_analysis')
     parser_check_cluster = subparsers.add_parser('check', help='checks the status of the specified cluster')
-    '''
     parser_profile = subparsers.add_parser('profile', help='profiles and averages r times the specified application, '
                                                            'deploys the profiling file in xSpark and downloads the '
-                                                          'results into the client machine')
+                                                           'results into the client machine')
+    '''
     parser_submit = subparsers.add_parser('submit', help='submits the specified application and downloads the results '
                                                          'into the client machine')
     '''
@@ -260,18 +335,32 @@ def main():
 
     parser_check_cluster.add_argument('cluster', choices=['hdfs', 'spark', 'all', 'generic'], help='The specified cluster')
 
-    '''
-    parser_profile.add_argument('exp_file_path', help='experiment file path')
+    parser_profile.add_argument('exp_profile_name', nargs='?', default="", help='experiment profile_name')
+    parser_profile.add_argument('-e', '--executors', default=None, type=int, dest='max_executors',
+                                   help='Maximum number of executors to be used in the experiments. '
+                                        'If None, the number of executor will be equal to (number of Spark nodes - 1) '
+                                        '[default: %(default)s]')
+    parser_profile.add_argument('-b', '--benchmark', default='pagerank', choices=['pagerank', 'kmeans', 'sort_by_key'],
+                                   required=True, help='the benchmark application to run')
+    parser_profile.add_argument('-v', '--variable-parameter', dest='var_par', nargs='+', required=True,
+                                   help="variable parameter for the selected benchmark "
+                                        "(it will be considered num_v for pagerank, num_of_points for kmeans,"
+                                        "scale_factor for sort_by_key)")
     parser_profile.add_argument('-r', '--num-runs', default=1, type=int, dest='num_runs', help='Number of runs')
-
+    parser_profile.add_argument('-p', '--num-partitions', required=True, type=int, dest='num_partitions',
+                                   help='Number of partitions for each task')
+    parser_profile.add_argument("-l", "--local", dest="local", action="store_true",
+                                      help="use default local output folders"
+                                           "[default: %(default)s]")
+    '''
     parser_submit.add_argument('exp_file_path', help='experiment file path')
     '''
 
     parser_setup.set_defaults(func=setup)
     parser_reboot.set_defaults(func=reboot)
     parser_terminate.set_defaults(func=terminate)
-    '''
     parser_profile.set_defaults(func=profile)
+    '''
     parser_submit.set_defaults(func=submit)
     '''
 

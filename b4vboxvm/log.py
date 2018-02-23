@@ -15,16 +15,11 @@ from datetime import timedelta
 
 from config import PRIVATE_KEY_PATH, PROVIDER
 from util.utils import timing, string_to_datetime
-from util.ssh_client import sshclient_from_node, sshclient_from_ip #vboxvm
+from util.ssh_client import sshclient_from_node
 
 import run
 import shutil
 from config import PROCESS_ON_SERVER
-
-import socket #vboxvm
-
-#ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-#NORM_ROOT_DIR = ROOT_DIR.split(":")[-1].replace("\\", "/")
 
 def download_master(node, output_folder, log_folder, config):
     """Download log from master instance
@@ -35,74 +30,53 @@ def download_master(node, output_folder, log_folder, config):
     :return: output_folder and the app_id: the application id
     """
 
-    #ssh_client = sshclient_from_node(node, ssh_key_file=PRIVATE_KEY_PATH, user_name='ubuntu') #vboxvm_removed
-    master_public_ip = socket.gethostbyname("XSPARKWORK0") #vboxvm
-    ssh_client = sshclient_from_ip(master_public_ip, PRIVATE_KEY_PATH, user_name='ubuntu') #vboxvm
+    ssh_client = sshclient_from_node(node, ssh_key_file=PRIVATE_KEY_PATH, user_name='ubuntu')
 
     app_id = ""
-    #most_recent_events_logfile = ""
-    #most_recent_events_logfile_folder = ""
+    most_recent_events_logfile = ""
+    most_recent_events_logfile_folder = ""
     previous_file = ""
-    files_list = ssh_client.listdir("" + config["Spark"]["SparkHome"] + "spark-events/")
-    # get the most recent app id and download all the files in the folder having that name.
-    most_recent_events_logfile = max(files_list)
-    most_recent_events_logfile_folder = output_folder + "/" + most_recent_events_logfile
-    for file in files_list:
+    for file in ssh_client.listdir("" + config["Spark"]["SparkHome"] + "spark-events/"):
         print("BENCHMARK: " + file)
         print("LOG FOLDER: " + log_folder)
-        print("OUTPUT FOLDER: " + most_recent_events_logfile_folder)
+        print("OUTPUT FOLDER: " + output_folder)
         app_id = file
-        #if log_folder != output_folder:
-        #    output_folder = output_folder + app_id
+        if log_folder != output_folder:
+            output_folder = output_folder + app_id
         try:
-            os.makedirs(most_recent_events_logfile_folder)
+            os.makedirs(output_folder)
         except FileExistsError:
             print("Output folder already exists")
-        #if most_recent_events_logfile < file:
-        #    most_recent_events_logfile = file
-        #    most_recent_events_logfile_folder = output_folder
-            #if previous_file != "":
-            #    os.remove(previous_file)
-        input_file = config["Spark"]["SparkHome"] + "spark-events/" + file
-        output_bz = file + ".bz"
-        print("Bzipping event log...")
-        #ssh_client.run("pbzip2 -9 -p" + str( #vboxvm_removed
-        #    config["Control"]["CoreVM"]) + " -c " + input_file + " > " + output_bz) #vboxvm_removed
-        stdout, stderr, status = ssh_client.run("pbzip2 -9 -p1 -c " + input_file + " > " + "/home/ubuntu/" + output_bz) #vboxvm
-        print('ssh_client.run("pbzip2 -9 -p1 -c ' + input_file + ' > ' + '/home/ubuntu/' +  output_bz + '"): ' + stdout + stderr) #vboxvm
-        #ssh_client.get(remotepath=output_bz, localpath=most_recent_events_logfile_folder + "/" + output_bz)
-        if PROCESS_ON_SERVER:
-            if file == most_recent_events_logfile:
-                shutil.copyfile(input_file, "spark_log_profiling/input_logs/" + file)
-            # ssh_client.get(remotepath=input_file, localpath=output_folder + "/" + file)
-            shutil.copyfile("/home/ubuntu/" + output_bz, most_recent_events_logfile_folder + "/" + output_bz)
-            #previous_file = output_folder + "/" + file
-        else:    
-            #print("Bzipping event log...")
-            #ssh_client.run("pbzip2 -9 -p" + str( #vboxvm_removed
-            #    config["Control"]["CoreVM"]) + " -c " + input_file + " > " + output_bz) #vboxvm_removed
-            #stdout, stderr, status = ssh_client.run("pbzip2 -9 -p1 -c " + input_file + " > " + output_bz) #vboxvm
-            #print('ssh_client.run("pbzip2 -9 -p1 -c "' + input_file + '" > "' + output_bz + '): ' + stdout + stderr) #vboxvm
-            ssh_client.get(remotepath=output_bz, localpath=most_recent_events_logfile_folder + "/" + output_bz)
-            if file == most_recent_events_logfile:
-                shutil.copyfile(most_recent_events_logfile_folder + "/" + output_bz, "spark_log_profiling/input_logs/" + output_bz)
-            #previous_file = output_folder + "/" + file + ".bz"
-        # Removing unneeded copy of .bz logfile
-        stdout, stderr, status = ssh_client.run("sudo rm /home/ubuntu/" + output_bz) #vboxvm
-    ###if not PROCESS_ON_SERVER:
-    ###    most_recent_events_logfile += ".bz"
+        if most_recent_events_logfile < file:
+            most_recent_events_logfile = file
+            most_recent_events_logfile_folder = output_folder
+            if previous_file != "":
+                os.remove(previous_file)
+            input_file = config["Spark"]["SparkHome"] + "spark-events/" + file
+            if PROCESS_ON_SERVER:
+                # ssh_client.get(remotepath=input_file, localpath=output_folder + "/" + file)
+                shutil.copy(input_file, output_folder + "/" + file)
+                previous_file = output_folder + "/" + file
+            else:
+                output_bz = input_file + ".bz"
+                print("Bzipping event log...")
+                ssh_client.run("pbzip2 -9 -p" + str(
+                    config["Control"]["CoreVM"]) + " -c " + input_file + " > " + output_bz)
+                ssh_client.get(remotepath=output_bz, localpath=output_folder + "/" + file + ".bz")
+                previous_file = output_folder + "/" + file + ".bz"
+    if not PROCESS_ON_SERVER:
+        most_recent_events_logfile += ".bz"
     print("most_recent_events_logfile: " + most_recent_events_logfile_folder + "/" + most_recent_events_logfile)
     # ssh_client.get(remotepath="xSpark-bench/" + most_recent_events_logfile_folder + "/" + most_recent_events_logfile, localpath="input_logs/" + most_recent_events_logfile)
-    #shutil.move(most_recent_events_logfile_folder + "/" + most_recent_events_logfile, "spark_log_profiling/input_logs/" + most_recent_events_logfile)
-    ###shutil.copyfile(most_recent_events_logfile_folder + "/" + most_recent_events_logfile, "spark_log_profiling/input_logs/" + most_recent_events_logfile)
+    shutil.move(most_recent_events_logfile_folder + "/" + most_recent_events_logfile, "spark_log_profiling/input_logs/" + most_recent_events_logfile)
     # shutil.copy(most_recent_events_logfile_folder + "/" + most_recent_events_logfile, "input_logs/" + most_recent_events_logfile)
     # os.remove(most_recent_events_logfile_folder + "/" + most_recent_events_logfile)
     for file in ssh_client.listdir(log_folder):
         print(file)
         if file != "bench-report.dat":
-            output_file = (most_recent_events_logfile_folder + "/" + file).replace(":", "-")
+            output_file = (output_folder + "/" + file).replace(":", "-")
             ssh_client.get(remotepath=log_folder + "/" + file, localpath=output_file)
-    return most_recent_events_logfile_folder, app_id
+    return output_folder, app_id
 '''
 def download_master(node, output_folder, log_folder, config):
     """Download log from master instance
@@ -206,23 +180,21 @@ def download(log_folder, nodes, master_ip, output_folder, config):
     """
     # MASTER
 
-    #master_node = [i for i in nodes if run.get_ip(i) == master_ip][0] #vboxvm_removed
-    #print("Downloading log from Master: PublicIp="+master_node.public_ips[0] +" PrivateIp=" + master_node.private_ips[0]) #vboxvm_removed
-    master_node = nodes[0] #vboxvm
-    master_public_ip = socket.gethostbyname("XSPARKWORK0") #vboxvm
-    print("Downloading log from Master: PublicIp="+ master_public_ip  +" PrivateIp=" +  master_public_ip ) #vboxvm
+    master_node = [i for i in nodes if run.get_ip(i) == master_ip][0]
+
+    print("Downloading log from Master: PublicIp="+master_node.public_ips[0] +" PrivateIp=" + master_node.private_ips[0])
+
     output_folder, app_id = download_master(master_node, output_folder, log_folder, config)
 
     # SLAVE
-    ''' #vboxvm_removed
     with ThreadPoolExecutor(multiprocessing.cpu_count()) as executor:
         for i in nodes:
             ip = run.get_ip(i)
             if ip != master_ip:
                 worker = executor.submit(download_slave, i, output_folder, app_id, config)
                 output_folder = worker.result()
-    '''
     return output_folder
+
 
 def load_app_data(app_log_path):
     """

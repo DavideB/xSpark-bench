@@ -15,6 +15,8 @@ import util.utils as utils
 from spark_log_profiling import processing as profiling
 from spark_time_analysis import run as run_ta
 
+from spark_log_profiling.average_runs import OUTPUT_DIR
+
 class BenchInstance(object):
     driver = None
     nodes = None
@@ -43,6 +45,24 @@ class BenchInstance(object):
         launch.wait_ping_libcloud(self.driver, instance_ids, copy.deepcopy(instance_ids))
 
     def run(self, num_run):
+        with utils.open_cfg(mode='w') as cfg:
+            cfg['out_folders'] = {}
+            cfg['main']['delete_hdfs'] = 'true'
+        for i in range(num_run):
+            if self.cluster_id == CLUSTER_MAP['spark']:
+                print(bold('Experiment ({}/{})'.format(i + 1, num_run)))
+            try:
+                self.retrieve_nodes()
+                with utils.open_cfg(mode='w') as cfg:
+                    cfg['main']['iter_num']= str(i + 1)
+                x_run.run_benchmark(self.nodes)
+                if i == 0:
+                    with utils.open_cfg(mode='w') as cfg:
+                        cfg['main']['delete_hdfs'] = 'false'
+            except (OSError, IOError) as exc:
+                print('ERROR: {}\n\nSkipping Experiment ({}/{})'.format(exc, i + 1, num_run))
+    
+    def run_disabled(self, num_run):
         with utils.open_cfg(mode='w') as cfg:
             cfg['out_folders'] = {}
             cfg['main']['delete_hdfs'] = 'true'
@@ -103,6 +123,17 @@ class BenchInstance(object):
         else:
             return True
 
+    def upload_profile(self):
+        cfg = utils.get_cfg()
+        benchmark = cfg['main']['benchmark']
+        profile_fname = cfg[benchmark]['profile_name'] + '.json'
+        filedir = OUTPUT_DIR
+        filepath = filedir + '/' + profile_fname
+        try:
+            self.retrieve_nodes()
+            x_run.upload_profile_to_master(self.nodes, profile_fname, filepath)
+        except (OSError, IOError) as exc:
+            print('ERROR: {}\n\nCould not upload profile)'.format(exc))
 
 class AwsBenchInstace(BenchInstance):
     """
