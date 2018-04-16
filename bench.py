@@ -8,9 +8,12 @@ import launch
 import run as x_run
 from colors import header, okblue, okgreen, warning, underline, bold, fail
 
-from credentials import AWS_ACCESS_ID, AWS_SECRET_KEY,\
-    AZ_APPLICATION_ID, AZ_SECRET, AZ_SUBSCRIPTION_ID, AZ_TENANT_ID
-from config import CONFIG_DICT, PROVIDER, REGION, TAG, NUM_INSTANCE, NUM_RUN, CLUSTER_ID, TERMINATE, RUN, REBOOT, CLUSTER_MAP
+#from credentials import AWS_ACCESS_ID, AWS_SECRET_KEY,\
+#    AZ_APPLICATION_ID, AZ_SECRET, AZ_SUBSCRIPTION_ID, AZ_TENANT_ID
+#from config import CONFIG_DICT, PROVIDER, REGION, TAG, NUM_INSTANCE, NUM_RUN, CLUSTER_ID, TERMINATE, RUN, REBOOT, CLUSTER_MAP, \
+#    AWS_ACCESS_ID, AWS_SECRET_KEY, AZ_APPLICATION_ID, AZ_SECRET, AZ_SUBSCRIPTION_ID, AZ_TENANT_ID
+from configure import config_instance as c
+from pathlib import Path
 import util.utils as utils
 from spark_log_profiling import processing as profiling
 from spark_time_analysis import run as run_ta
@@ -47,9 +50,21 @@ class BenchInstance(object):
     def run(self, num_run):
         with utils.open_cfg(mode='w') as cfg:
             cfg['out_folders'] = {}
-            cfg['main']['delete_hdfs'] = 'true'
+            if not 'delete_hdfs' in cfg['main']:
+                cfg['main']['delete_hdfs'] = 'true' 
+            cfg['main']['num_run'] = str(num_run)
+            sess_file = Path("session.txt")
+            session_no = 0
+            if sess_file.exists():
+                with open("session.txt", 'r') as f:
+                    fc = f.read()
+                    session_no = int(fc) + 1 if len(fc) > 0 else 0
+                    f.close()
+            with open("session.txt", 'w') as f:
+                    f.write(str(session_no))
+                    f.close()
         for i in range(num_run):
-            if self.cluster_id == CLUSTER_MAP['spark']:
+            if self.cluster_id == c.CLUSTER_MAP['spark']:
                 print(bold('Experiment ({}/{})'.format(i + 1, num_run)))
             try:
                 self.retrieve_nodes()
@@ -67,7 +82,7 @@ class BenchInstance(object):
             cfg['out_folders'] = {}
             cfg['main']['delete_hdfs'] = 'true'
         for i in range(num_run):
-            if self.cluster_id == CLUSTER_MAP['spark']:
+            if self.cluster_id == c.CLUSTER_MAP['spark']:
                 print(bold('Experiment ({}/{})'.format(i + 1, num_run)))
             try:
                 self.retrieve_nodes()
@@ -82,7 +97,7 @@ class BenchInstance(object):
         print("Begin termination of instances and cleaning")
         '''
         # Cancel Spot Request
-        if PROVIDER == "AWS_SPOT" and num_instance > 0:
+        if c.PROVIDER == "AWS_SPOT" and num_instance > 0:
             for s in spot_requests:
                 driver.ex_cancel_spot_instance_request(s)
             print("Spot requests cancelled")
@@ -125,7 +140,7 @@ class BenchInstance(object):
 
     def upload_profile(self):
         cfg = utils.get_cfg()
-        benchmark = cfg['main']['benchmark']
+        benchmark = cfg['experiment']['benchmarkname']
         profile_fname = cfg[benchmark]['profile_name'] + '.json'
         filedir = OUTPUT_DIR
         filepath = filedir + '/' + profile_fname
@@ -135,7 +150,7 @@ class BenchInstance(object):
         except (OSError, IOError) as exc:
             print('ERROR: {}\n\nCould not upload profile)'.format(exc))
 
-class AwsBenchInstace(BenchInstance):
+class AwsBenchInstance(BenchInstance):
     """
     Aws implementation of bench instance
     NOT TESTED YET
@@ -145,17 +160,17 @@ class AwsBenchInstace(BenchInstance):
     def __init__(self, cluster_id):
         self.cluster_id = cluster_id
         set_spot_drivers()
-        self.cls = get_driver("ec2_spot_" + REGION.replace('-', '_'))
-        self.driver = self.cls(AWS_ACCESS_ID, AWS_SECRET_KEY)
+        self.cls = get_driver("ec2_spot_" + c.REGION.replace('-', '_'))
+        self.driver = self.cls(c.AWS_ACCESS_ID, c.AWS_SECRET_KEY)
         self.spot_requests = None
 
     def create_nodes(self, num_instances, assume_yes):
-        self.nodes, self.spot_requests = launch.launch_libcloud(self.driver, num_instances, CONFIG_DICT,
+        self.nodes, self.spot_requests = launch.launch_libcloud(self.driver, num_instances, c.CONFIG_DICT,
                                                                 self.cluster_id, assume_yes)
 
     def tag_nodes(self):
         for node in self.nodes:
-            self.driver.ex_create_tags(node, TAG[0])
+            self.driver.ex_create_tags(node, c.TAG[0])
 
     def retrieve_nodes(self):
         all_nodes = self.driver.list_nodes(ex_filters={'instance-state-name': ['running']})
@@ -174,20 +189,20 @@ class AzureBenchInstance(BenchInstance):
         self.cluster_id = cluster_id
         set_azurearm_driver()
         self.cls = get_driver("CustomAzureArm")
-        self.driver = self.cls(tenant_id=AZ_TENANT_ID,
-                               subscription_id=AZ_SUBSCRIPTION_ID,
-                               key=AZ_APPLICATION_ID, secret=AZ_SECRET, region=CONFIG_DICT["Azure"]["Location"])
+        self.driver = self.cls(tenant_id=c.AZ_TENANT_ID,
+                               subscription_id=c.AZ_SUBSCRIPTION_ID,
+                               key=c.AZ_APPLICATION_ID, secret=c.AZ_SECRET, region=c.CONFIG_DICT["Azure"]["Location"])
 
     def create_nodes(self, num_instances, assume_yes):
-        self.nodes = launch.launch_libcloud(self.driver, num_instances, CONFIG_DICT, self.cluster_id, assume_yes)
+        self.nodes = launch.launch_libcloud(self.driver, num_instances, c.CONFIG_DICT, self.cluster_id, assume_yes)
 
     def tag_nodes(self):
         for node in self.nodes:
-            self.driver.ex_create_tags(node, {"ClusterId": self.cluster_id})  # was CONFIG_DICT["Azure"]["ClusterId"]
+            self.driver.ex_create_tags(node, {"ClusterId": self.cluster_id})  # was c.CONFIG_DICT["Azure"]["ClusterId"]
 
     def retrieve_nodes(self):
         print("Retrieving nodes of {} cluster".format(self.cluster_id))
-        all_nodes = self.driver.list_nodes(ex_resource_group=CONFIG_DICT["Azure"]["ResourceGroup"])
+        all_nodes = self.driver.list_nodes(ex_resource_group=c.CONFIG_DICT["Azure"]["ResourceGroup"])
         self.nodes = [n for n in all_nodes if n.extra["tags"]["ClusterId"] == self.cluster_id]
         print("Found {} nodes".format(len(self.nodes)))
         return self.nodes

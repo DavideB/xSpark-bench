@@ -13,13 +13,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime as dt
 from datetime import timedelta
 
-from config import PRIVATE_KEY_PATH, PROVIDER
+#from config import PRIVATE_KEY_PATH, PROVIDER, PROCESS_ON_SERVER
+from configure import config_instance as c
 from util.utils import timing, string_to_datetime
 from util.ssh_client import sshclient_from_node, sshclient_from_ip #vboxvm
 
 import run
 import shutil
-from config import PROCESS_ON_SERVER
 
 import socket #vboxvm
 
@@ -35,9 +35,9 @@ def download_master(node, output_folder, log_folder, config):
     :return: output_folder and the app_id: the application id
     """
 
-    #ssh_client = sshclient_from_node(node, ssh_key_file=PRIVATE_KEY_PATH, user_name='ubuntu') #vboxvm_removed
+    #ssh_client = sshclient_from_node(node, ssh_key_file=c.PRIVATE_KEY_PATH, user_name='ubuntu') #vboxvm_removed
     master_public_ip = socket.gethostbyname("XSPARKWORK0") #vboxvm
-    ssh_client = sshclient_from_ip(master_public_ip, PRIVATE_KEY_PATH, user_name='ubuntu') #vboxvm
+    ssh_client = sshclient_from_ip(master_public_ip, c.PRIVATE_KEY_PATH, user_name='ubuntu') #vboxvm
 
     app_id = ""
     #most_recent_events_logfile = ""
@@ -71,7 +71,7 @@ def download_master(node, output_folder, log_folder, config):
         stdout, stderr, status = ssh_client.run("pbzip2 -9 -p1 -c " + input_file + " > " + "/home/ubuntu/" + output_bz) #vboxvm
         print('ssh_client.run("pbzip2 -9 -p1 -c ' + input_file + ' > ' + '/home/ubuntu/' +  output_bz + '"): ' + stdout + stderr) #vboxvm
         #ssh_client.get(remotepath=output_bz, localpath=most_recent_events_logfile_folder + "/" + output_bz)
-        if PROCESS_ON_SERVER:
+        if c.PROCESS_ON_SERVER:
             if file == most_recent_events_logfile:
                 shutil.copyfile(input_file, "spark_log_profiling/input_logs/" + file)
             # ssh_client.get(remotepath=input_file, localpath=output_folder + "/" + file)
@@ -89,7 +89,7 @@ def download_master(node, output_folder, log_folder, config):
             #previous_file = output_folder + "/" + file + ".bz"
         # Removing unneeded copy of .bz logfile
         stdout, stderr, status = ssh_client.run("sudo rm /home/ubuntu/" + output_bz) #vboxvm
-    ###if not PROCESS_ON_SERVER:
+    ###if not c.PROCESS_ON_SERVER:
     ###    most_recent_events_logfile += ".bz"
     print("most_recent_events_logfile: " + most_recent_events_logfile_folder + "/" + most_recent_events_logfile)
     # ssh_client.get(remotepath="xSpark-bench/" + most_recent_events_logfile_folder + "/" + most_recent_events_logfile, localpath="input_logs/" + most_recent_events_logfile)
@@ -113,7 +113,7 @@ def download_master(node, output_folder, log_folder, config):
     :return: output_folder and the app_id: the application id
     """
     bzip_output_folder = "spark_log_profiling/input_logs"
-    ssh_client = sshclient_from_node(node, ssh_key_file=PRIVATE_KEY_PATH, user_name='ubuntu')
+    ssh_client = sshclient_from_node(node, ssh_key_file=c.PRIVATE_KEY_PATH, user_name='ubuntu')
 
     app_id = ""
     files_list = ssh_client.listdir("" + config["Spark"]["SparkHome"] + "spark-events/")
@@ -158,24 +158,24 @@ def download_slave(node, output_folder, app_id, config):
     :param app_id: the application
     :return: output_folder: the output folder
     """
-    ssh_client = sshclient_from_node(node, ssh_key_file=PRIVATE_KEY_PATH, user_name='ubuntu')
+    ssh_client = sshclient_from_node(node, ssh_key_file=c.PRIVATE_KEY_PATH, user_name='ubuntu')
 
     print("Downloading log from slave: PublicIp=" + node.public_ips[0] + " PrivateIp=" + node.private_ips[0])
     try:
         worker_ip_fixed = node.private_ips[0].replace(".", "-")
-        if PROVIDER == "AWS_SPOT":
+        if c.PROVIDER == "AWS_SPOT":
             worker_log = "{0}logs/spark-ubuntu-org.apache.spark.deploy.worker.Worker-1-ip-{1}.out".format(
                 config["Spark"]["SparkHome"], worker_ip_fixed)
-        elif PROVIDER == "AZURE":
+        elif c.PROVIDER == "AZURE":
             worker_log = "{0}logs/spark-root-org.apache.spark.deploy.worker.Worker-1-{1}.out".format(
                 config["Spark"]["SparkHome"], node.extra["name"])
         print(worker_log)
         ssh_client.run(
             "screen -ls | grep Detached | cut -d. -f1 | awk '{print $1}' | xargs -r kill")
-        if PROVIDER == "AWS_SPOT":
+        if c.PROVIDER == "AWS_SPOT":
             output_worker_log = "{0}/spark-ubuntu-org.apache.spark.deploy.worker.Worker-1-ip-{1}.out".format(
                 output_folder, node.private_ips[0])
-        elif PROVIDER == "AZURE":
+        elif c.PROVIDER == "AZURE":
             output_worker_log = "{0}/spark-root-org.apache.spark.deploy.worker.Worker-1-{1}.out".format(
                 output_folder,  node.extra["name"])
         ssh_client.get(remotepath=worker_log, localpath=output_worker_log)

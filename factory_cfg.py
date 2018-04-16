@@ -1,6 +1,6 @@
-from bench import AwsBenchInstace, AzureBenchInstance
+from bench import AwsBenchInstance, AzureBenchInstance
 
 supported_providers = {
-        'AWS_SPOT' : AwsBenchInstace,
+        'AWS_SPOT' : AwsBenchInstance,
         'AZURE' : AzureBenchInstance
     }

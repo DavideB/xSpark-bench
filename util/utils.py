@@ -3,7 +3,8 @@ from datetime import datetime as dt
 from functools import wraps
 import configparser
 import os
-from config import CLUSTERS_CFG_PATH, ROOT_DIR, CLUSTERS_CFG_FILENAME
+#from config import CLUSTERS_CFG_PATH, ROOT_DIR, CLUSTERS_CFG_FILENAME
+from configure import config_instance as c
 import errno
 
 
@@ -64,12 +65,12 @@ def string_to_datetime(time_string):
 
 def get_cfg():
     cfg = configparser.ConfigParser()
-    cfg.read(CLUSTERS_CFG_PATH)
+    cfg.read(c.CLUSTERS_CFG_PATH)
     return cfg
 
 
-def write_cfg(cfg, output_path=ROOT_DIR):
-    with open(os.path.join(output_path, CLUSTERS_CFG_FILENAME), 'w') as cfg_file:
+def write_cfg(cfg, output_path=c.ROOT_DIR):
+    with open(os.path.join(output_path, c.CLUSTERS_CFG_FILENAME), 'w') as cfg_file:
         cfg.write(cfg_file)
 
 
@@ -77,7 +78,7 @@ class open_cfg:
     """
     context manager to open and automatically save config files
     """
-    def __init__(self, r_path=CLUSTERS_CFG_PATH, mode='r', w_path=None):
+    def __init__(self, r_path=c.CLUSTERS_CFG_PATH, mode='r', w_path=None):
         self.cfg = configparser.ConfigParser()
         self.r_path = r_path
         self.w_path = w_path if w_path else r_path
@@ -100,3 +101,12 @@ def make_sure_path_exists(path):
     except OSError as exception:
         if exception.errno != errno.EEXIST:
             raise
+
+def string_to_bool(string):
+    """
+    Convert from string to bool()
+
+    :param time_string: the string to be converted
+    :return: the converted bool() value (True|False)
+    """
+    return string in ['true', 'True','t', 'T', 'y', 'yes', 'Y', 'Yes' '1', 'one', 'One']

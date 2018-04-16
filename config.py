@@ -1,6 +1,7 @@
 from enum import Enum
 import os
-from credentials import AZ_KEY_NAME, AZ_PUB_KEY_PATH, AZ_PRV_KEY_PATH
+from credentials import AZ_KEY_NAME, AZ_PUB_KEY_PATH, AZ_PRV_KEY_PATH, AWS_ACCESS_ID, AWS_SECRET_KEY,\
+                        AZ_APPLICATION_ID, AZ_SECRET, AZ_SUBSCRIPTION_ID, AZ_TENANT_ID
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 CLUSTERS_CFG_FILENAME = 'cfg_clusters.ini'
@@ -65,7 +66,7 @@ REGION = "us-west-2"
 KEY_PAIR_PATH = "C:\\Users\\Simone Ripamonti\\Desktop\\" + DATA_AMI[REGION]["keypair"] + ".pem"
 """KeyPair path for the instance"""
 SECURITY_GROUP = "spark-cluster"
-"""Secutiry group of the instance"""
+"""Security group of the instance"""
 PRICE = DATA_AMI[REGION]["price"]
 INSTANCE_TYPE = "m3.medium"
 """Instance type"""
@@ -79,9 +80,9 @@ KILL_JAVA = 1
 NUM_RUN = 1
 """Number of run to repeat the benchmark"""
 PROCESS_ON_SERVER = 0
-"""Download benchmark logs and generate plots on server """
+"""Download benchmark logs and generate profiles and plots on server """
 INSTALL_PYTHON3 = 1
-"""Install Pyhton3 on cspark master"""
+"""Install Python3 on cspark master"""
 CLUSTER_ID = "CSPARKWORK"
 # CLUSTER_ID = "CSPARKHDFS"
 # CLUSTER_ID = "DEV"
@@ -435,5 +436,41 @@ VAR_PAR_MAP = {
         'var_name': 'scale_factor',
         'default': (2, 10000000),
         'profile_name': 'SVM_Classifier_Example'
-    }          
+    },
+    "scala-agg-by-key": {
+        'profile_name': ''
+    },
+    "scala-agg-by-key-int": {
+        'profile_name': ''
+    },
+    "scala-agg-by-key-naive": {
+        'profile_name': ''
+    },
+    "scala-sort-by-key": {
+        'var_name': 'scale_factor',
+        'default': (0, 15),
+        'profile_name': 'TestRunner__sort-by-key'
+    },
+    "scala-sort-by-key-int": {
+        'profile_name': ''
+    },
+    "scala-count": {
+        'profile_name': ''
+    },
+    "scala-count-w-fltr": {
+        'profile_name': ''
+    },
+    "PageRank": {
+        'var_name': 'num_v',
+        'default': (2, 10000000),
+        'profile_name': 'Spark_PageRank_Application'
+    },
+    "KMeans": {
+        'var_name': 'num_of_points',
+        'default': (2, 10000000),
+        'profile_name': 'Spark_KMeans_Example'
+    },
+    "DecisionTree": {
+        'profile_name': ''
+    }  
 }

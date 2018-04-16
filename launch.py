@@ -19,8 +19,8 @@ from drivers.ccglibcloud.ec2spot import SpotRequestState
 
 import copy
 
-from config import PROVIDER, CONFIG_DICT, CLUSTER_ID
-
+#from config import PROVIDER, CONFIG_DICT, CLUSTER_ID
+from configure import config_instance as c
 
 def query_yes_no(question, default="yes"):
     """Ask a yes/no question via raw_input() and return their answer.
@@ -82,10 +82,10 @@ def wait_ping_libcloud(driver, instance_ids, pending_instance_ids):
     :param pending_instance_ids: id of remaining nodes to ping
     :return: Exit when all nodes are reachable on port 22
     """
-    if (PROVIDER == "AWS_SPOT"):
+    if (c.PROVIDER == "AWS_SPOT"):
         nodes = driver.list_nodes(ex_node_ids=pending_instance_ids)
-    elif (PROVIDER == "AZURE"):
-        nodes = driver.list_nodes(ex_resource_group=CONFIG_DICT["Azure"]["ResourceGroup"])
+    elif (c.PROVIDER == "AZURE"):
+        nodes = driver.list_nodes(ex_resource_group=c.CONFIG_DICT["Azure"]["ResourceGroup"])
         nodes = [n for n in nodes if n.id in pending_instance_ids]
     for node in nodes:
         if ping(node.public_ips[0], 22) == 22:
@@ -108,10 +108,10 @@ def wait_for_running_libcloud(driver, instance_ids, pending_instance_ids):
     :param pending_instance_ids: the remaining node ids to check
     :return: when all nodes are running
     """
-    if (PROVIDER == "AWS_SPOT"):
+    if (c.PROVIDER == "AWS_SPOT"):
         nodes = driver.list_nodes(ex_node_ids=pending_instance_ids)
-    elif (PROVIDER == "AZURE"):
-        nodes = driver.list_nodes(ex_resource_group=CONFIG_DICT["Azure"]["ResourceGroup"])
+    elif (c.PROVIDER == "AZURE"):
+        nodes = driver.list_nodes(ex_resource_group=c.CONFIG_DICT["Azure"]["ResourceGroup"])
         nodes = [n for n in nodes if n.id in pending_instance_ids]
     for node in nodes:
         if node.state == NodeState.RUNNING:
@@ -189,7 +189,7 @@ def check_spot_price(driver, config):
         exit(1)
 
 
-def launch_libcloud(driver, num_instance, config, cluster_id=CLUSTER_ID, assume_yes=False):
+def launch_libcloud(driver, num_instance, config, cluster_id=c.CLUSTER_ID, assume_yes=False):
     """Launch num_instance instances on the desired provider given by the driver, using a provider depended config
 
     :param driver: the desired provider driver
@@ -199,7 +199,7 @@ def launch_libcloud(driver, num_instance, config, cluster_id=CLUSTER_ID, assume_
     """
     proceed = True if assume_yes else query_yes_no("Are you sure to launch " + str(num_instance) + " new instances on " + cluster_id + "?", "no")
     if proceed:
-        if (PROVIDER == "AWS_SPOT"):
+        if (c.PROVIDER == "AWS_SPOT"):
             check_spot_price(driver, config)
 
             # pick size and images
@@ -256,7 +256,7 @@ def launch_libcloud(driver, num_instance, config, cluster_id=CLUSTER_ID, assume_
 
             return nodes, spot_request_updates
 
-        if PROVIDER == "AZURE":
+        if c.PROVIDER == "AZURE":
             # obtain size
             print("Collecting node size")
             sizes = driver.list_sizes()
