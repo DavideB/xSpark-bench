@@ -1,0 +1,10 @@
+{
+    "Deadline": 70000,
+	"BenchmarkName": "scala-sort-by-key",
+    "BenchmarkConf": {
+	        "NumPartitions": 700,
+	        "UniqueKeys": 700,
+	        "ScaleFactor": 17,
+	        "ReduceTasks": 700 
+	        }
+}

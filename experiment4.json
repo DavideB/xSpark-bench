@@ -1,0 +1,12 @@
+{
+    "Deadline": 40000,
+	"BenchmarkName": "KMeans",
+    "BenchmarkConf": {
+	        "NumOfPartitions": 400,
+	        "NumOfPoints": 400000000,
+	        "NumOfClusters": 40,
+	        "Dimensions": 40,
+	        "Scaling": 0.6,
+	        "MaxIterations": 1
+	}
+}

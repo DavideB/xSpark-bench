@@ -1,0 +1,11 @@
+{
+    "Deadline": 50000,
+	"BenchmarkName": "DecisionTree",
+    "BenchmarkConf": {
+	        "NumOfPartitions": 500,
+	        "NumOfExamples": 5000000,
+	        "NumOfFeatures": 5,
+	        "NumOfClassC": 5,
+	        "MaxIterations": 1 
+	    }
+}

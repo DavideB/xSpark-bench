@@ -1,0 +1,54 @@
+{
+	"Provider": "AZURE",
+    "Credentials": {
+        "AzTenantId": "e8f0c250-ac61-4db3-9fab-d9298521d3fc",
+        "AzSubscriptionId": "834f33f3-9e2c-49f3-893f-e6fbf6b2d942",
+        "AzApplicationId": "788561c2-e383-4add-b40b-0aa2f9961960",
+        "AzSecret": "3QUJ4JYtDykSbNwrJiHyL6mvrSZjVLLcVbXZ1nqs8jY=",
+        "PubKeyPath": "C:/Users/Davide/Desktop/id_rsa.pub",
+        "PrvKeyPath": "C:/Users/Davide/Desktop/id_rsa",
+        "AwsAccessId": "",
+        "AwsSecretId": "",
+        "KeyPairPath": "C:/Users/Davide/Desktop/xspark.pem"  
+	},
+	"VM": {
+		"Core": 10,
+		"Memory": "100g"
+		},
+    "ProcessOnServer": true,
+	"InstallPython3": false,
+	"Aws": {
+        "SecurityGroup": "spark-cluster",
+        "Region": "us-west-2",
+        "EbsOptimized": true,
+        "Price": "0.015",
+        "InstanceType": "m3.medium"
+    },
+    "Azure": {
+        "ResourceGroup": "spark",
+        "SecurityGroup": "cspark-securitygroup2",
+        "StorageAccount": {
+            "Sku": "standard_lrs",
+            "Kind": "storage",
+            "Name": "sparkdisks"
+        },
+        "Subnet": "default",
+        "NodeSize": "Standard_D14_v2_Promo",
+        "Network": "cspark-vnet2",
+        "Location": "westeurope",
+        "NodeImage": {
+            "BlobContainer": "vhd",
+            "StorageAccount": "sparkdisks",
+            "Name": "vm-os.vhd"
+        }
+    },
+    "Spark": {
+        "ExternalShuffle": "true",
+        "SparkHome": "/usr/local/spark/",
+        "LocalityWaitRack": 0,
+        "CPUTask": 1,
+        "LocalityWaitProcess": 1,
+        "LocalityWait": 0,
+        "LocalityWaitNode": 0
+    }
+}

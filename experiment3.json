@@ -1,0 +1,12 @@
+{
+    "Deadline": 30000,
+	"BenchmarkName": "PageRank",
+    "BenchmarkConf": {
+	        "NumOfPartitions": 300,
+	        "NumV": 3000000,
+	        "Mu": 3.0,
+	        "Sigma": 3.0,
+	        "MaxIterations": 1,
+	        "NumTrials": 1	   
+	    }
+}

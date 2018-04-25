@@ -1,0 +1,10 @@
+{
+    "Deadline": 450000,
+	"BenchmarkName": "SVM",
+    "BenchmarkConf": {
+	        "NumOfPartitions": 128,
+	        "NumOfExamples": 1000,
+	        "NumOfFeatures": 5,
+	        "MaxIterations": 1 
+	        }
+}

@@ -1,0 +1,13 @@
+{
+    "ReuseDataset": true,
+    "Deadline": 50000,
+	"BenchmarkName": "PageRank",
+    "BenchmarkConf": {
+	        "NumOfPartitions": 200,
+	        "NumV": 1000000,
+	        "Mu": 3.0,
+	        "Sigma": 0.0,
+	        "MaxIterations": 1,
+	        "NumTrials": 1	   
+	    }
+}
