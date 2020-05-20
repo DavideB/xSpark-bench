@@ -5,7 +5,7 @@
 		"Memory": "100g"
 		},
     "ProcessOnServer": true,
-	"InstallPython3": true,
+	"InstallPython3": false,
 	"Aws": {
         "SecurityGroup": "spark-cluster",
         "Region": "us-west-2",
@@ -26,21 +26,21 @@
                               }
     	},
     "Azure": {
-        "ResourceGroup": "spark",
+        "ResourceGroup": "xspark-davide-ap",
         "SecurityGroup": "cspark-securitygroup2",
         "StorageAccount": {
             "Sku": "standard_lrs",
             "Kind": "storage",
-            "Name": "sparkdisks"
+            "Name": "xsparkstoragedavide1"
         },
         "Subnet": "default",
         "NodeSize": "Standard_D14_v2_Promo",
         "Network": "cspark-vnet2",
-        "Location": "westeurope",
+        "Location": "australiaeast",
         "NodeImage": {
             "BlobContainer": "vhd",
-            "StorageAccount": "sparkdisks",
-            "Name": "vm5-os.vhd"
+            "StorageAccount": "xsparkstoragedavide1",
+            "Name": "vm2-os.vhd"
         }
     },
     "Spark": {

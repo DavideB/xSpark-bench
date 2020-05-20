@@ -527,7 +527,7 @@ def setup_master(node, slaves_ip, hdfs_master):
         # CORE_ALLOCATION
         if c.CORE_ALLOCATION != None and c.DEADLINE_ALLOCATION != None and c.STAGE_ALLOCATION != None:
             stdout, stderr, status = ssh_client.run("sed -i '57s{.*{spark.control.stage " + str(c.STAGE_ALLOCATION) + "{' "+c.SPARK_HOME+"conf/spark-defaults.conf")
-            print("setup_master, spark-defaults.conf 56 str(c.STAGE_ALLOCATION): " + str(c.STAGE_ALLOCATION) + stdout + stderr)
+            print("setup_master, spark-defaults.conf 57 str(c.STAGE_ALLOCATION): " + str(c.STAGE_ALLOCATION) + stdout + stderr)
             stdout, stderr, status = ssh_client.run("sed -i '58s{.*{spark.control.stagecores "+ str(c.CORE_ALLOCATION) +"{' "+c.SPARK_HOME + "conf/spark-defaults.conf")
             print("setup_master, spark-defaults.conf 58 str(c.CORE_ALLOCATION): " + str(c.CORE_ALLOCATION) + stdout + stderr)
             stdout, stderr, status = ssh_client.run("sed -i '59s{.*{spark.control.stagedeadlines " + str(
