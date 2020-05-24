@@ -252,7 +252,10 @@ def setup_slave(node, master_ip, count):
     if c.UPDATE_SPARK:
         print("   Updating Spark...")
         stdout, stderr, status = ssh_client.run(
-            """cd /usr/local/spark && git pull && git checkout """ + c.GIT_BRANCH)
+            """cd /usr/local/spark && git pull""")
+        print(stdout + stderr)
+        stdout, stderr, status = ssh_client.run(
+            """cd /usr/local/spark && git checkout """ + c.GIT_BRANCH)
         print(stdout + stderr)
         # CLEAN UP EXECUTORS APP LOGS
         ssh_client.run("sudo rm -r " + c.SPARK_HOME + "work/*")
@@ -263,6 +266,7 @@ def setup_slave(node, master_ip, count):
         ssh_client.run(
             """cd /usr/local/spark && git pull && build/mvn clean && build/mvn -T 1C -Phive -Pnetlib-lgpl -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.2 -Dscala-2.11 -DskipTests -Dmaven.test.skip=true package""")
         '''
+        print(stdout + stderr)
     # CLEAN UP EXECUTORS APP LOGS
     # ssh_client.run("rm -r " + c.SPARK_HOME + "work/*")
     ssh_client.run("sudo rm -r " + c.SPARK_HOME + "work/*")
@@ -441,15 +445,19 @@ def setup_master(node, slaves_ip, hdfs_master):
     if c.UPDATE_SPARK_MASTER:
         print("   Updating Spark...")
         stdout, stderr, status = ssh_client.run(
-            """cd /usr/local/spark && git pull && git checkout """ + c.GIT_BRANCH)
+            """cd /usr/local/spark && git pull""")
+        print(stdout + stderr)
+        stdout, stderr, status = ssh_client.run(
+            """cd /usr/local/spark && git checkout """ + c.GIT_BRANCH)
         print(stdout + stderr)
         ssh_client.run(
             """cd /usr/local/spark && git pull && build/mvn clean &&  build/mvn -T 1C -Phive -Pnetlib-lgpl -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.2 -Dscala-2.11 -DskipTests -Dmaven.test.skip=true package""")
-
         '''
         ssh_client.run(
             """cd /usr/local/spark && git pull && build/mvn clean &&  build/mvn -T 1C -Phive -Pnetlib-lgpl -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.2 -Dscala-2.11 -DskipTests -Dmaven.test.skip=true package""")
         '''
+        print(stdout + stderr)
+        
     print("   Remove Logs")
     # ssh_client.run("rm " + c.SPARK_HOME + "spark-events/*")
     ssh_client.run("sudo rm " + c.SPARK_HOME + "spark-events/*")
@@ -737,7 +745,8 @@ def setup_master(node, slaves_ip, hdfs_master):
                                                         "sudo apt-get install -y build-essential libssl-dev libffi-dev python-dev python3-dev && "+
                                                         #"sudo apt-get install pkg-config" +             #vboxvm? (double-check)
                                                         #"sudo apt-get install libfreetype6-dev" +       #vboxvm? (double-check)
-                                                        "sudo pip3 install --upgrade setuptools")
+                                                        "" # "sudo pip3 install --upgrade setuptools"    # do not run this as it makes pip3 to require python 3.5 
+                                                        )
                 """Install python3 on cSpark master"""
                 print("Installing Python3 on cspark master:\n" + stdout)
             stdout, stderr, status = ssh_client.run("sudo rm -r /home/ubuntu/xSpark-bench")

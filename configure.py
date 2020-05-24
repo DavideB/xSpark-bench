@@ -69,8 +69,8 @@ class Config(object):
     REBOOT = False                          #"""Reboot the instances of the cluster"""
     KILL_JAVA = True                        #"""Kill every java application on the cluster"""
     NUM_RUN = 1                             #"""Number of run to repeat the benchmark"""                          
-    PROCESS_ON_SERVER = True               #"""Download benchmark logs and generate profiles and plots on server """
-    INSTALL_PYTHON3 = True                  #"""Install Python3 on cspark master"""
+    PROCESS_ON_SERVER = False               #"""Download benchmark logs and generate profiles and plots on server """
+    INSTALL_PYTHON3 = False                  #"""Install Python3 on cspark master"""
     CLUSTER_ID = "CSPARKWORK"                         #"""Id of the cluster with the launched instances"""
     TAG = [{
             "Key": "ClusterId",
@@ -82,12 +82,12 @@ class Config(object):
     C_SPARK_HOME = "/usr/local/spark/"      # "controlled" spark home directory
     SPARK_HOME = C_SPARK_HOME               # Location of Spark in the ami"""
     LOG_LEVEL = "INFO"                      # Spark log verbosity level
-    GIT_BRANCH = "symb"                     # was "exp-2018" and before was "xSpark-1.0"
+    GIT_BRANCH = "symb"                     # was "symb" and before "exp_2018" and before was "xSpark-1.0"
     UPDATE_SPARK = True                    #"""Git pull and build Spark of all the cluster"""
     UPDATE_SPARK_MASTER = True             #"""Git pull and build Spark only of the master node"""
     UPDATE_SPARK_DOCKER = False             #"""Pull the docker image in each node of the cluster"""
     UPDATE_SPARK_BENCH = False
-    UPDATE_SPARK_PERF = True
+    UPDATE_SPARK_PERF = False
     SKEW_TEST = False
     ENABLE_EXTERNAL_SHUFFLE = "true"
     LOCALITY_WAIT = 0
